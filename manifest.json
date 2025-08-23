@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "Quest Insight Collector",
+  "version": "1.5.0",
+  "description": "Save insights from web pages to your Quest space",
+  "permissions": [
+    "storage",
+    "tabs",
+    "scripting",
+    "identity"
+  ],
+  "host_permissions": [
+    "https://quest-api-edz1.onrender.com/*",
+    "https://myquestspace.com/*"
+  ],
+  "oauth2": {
+    "client_id": "103202343935-5dkesvf5dp06af09o0d2373ji2ccd0rc.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/userinfo.profile"
+    ]
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+} 

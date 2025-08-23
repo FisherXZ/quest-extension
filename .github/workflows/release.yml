@@ -1,0 +1,58 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Create Release Package
+      run: |
+        mkdir quest-extension-release
+        cp manifest.json quest-extension-release/
+        cp popup.html quest-extension-release/
+        cp popup.js quest-extension-release/
+        cp background.js quest-extension-release/
+        cp content-script.js quest-extension-release/
+        cp README.md quest-extension-release/
+        cp -r icons quest-extension-release/
+        zip -r quest-extension-${{ github.ref_name }}.zip quest-extension-release/
+    
+    - name: Create Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        body: |
+          Quest Extension ${{ github.ref_name }}
+          
+          ## 下载
+          - [quest-extension-${{ github.ref_name }}.zip](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/quest-extension-${{ github.ref_name }}.zip)
+          
+          ## 安装方法
+          1. 下载zip文件并解压
+          2. 打开Chrome扩展管理页面 (chrome://extensions/)
+          3. 开启开发者模式
+          4. 点击"加载已解压的扩展程序"
+          5. 选择解压后的文件夹
+          
+          查看 [CHANGELOG.md](CHANGELOG.md) 了解详细更新内容。
+        draft: false
+        prerelease: false
+    
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./quest-extension-${{ github.ref_name }}.zip
+        asset_name: quest-extension-${{ github.ref_name }}.zip
+        asset_content_type: application/zip
