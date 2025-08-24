@@ -572,52 +572,102 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // Handle AI processing
-    async function handleAIProcess() {
-        const commentText = document.getElementById('insightComment').value;
-        const aiProcessBtn = document.getElementById('aiProcessBtn');
-        
-        if (!commentText.trim()) {
-            showMessage('Please enter some text to process', true);
-            return;
-        }
-        
-        // Show loading state
-        aiProcessBtn.disabled = true;
-        aiProcessBtn.textContent = '⏳ Processing...';
-        
-        try {
-            // Simple text enhancement (in a real implementation, this would call an AI API)
-            await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate processing time
+
+    
+    // Voice recording state
+    let isRecording = false;
+    let mediaRecorder = null;
+    let audioChunks = [];
+
+    // Handle voice input
+    async function handleVoiceInput() {
+        const voiceInputArea = document.getElementById('voiceInputArea');
+        const recordingIndicator = document.getElementById('recordingIndicator');
+        const commentTextarea = document.getElementById('insightComment');
+
+        if (!isRecording) {
+            // Start recording
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+
+                mediaRecorder.ondataavailable = (event) => {
+                    audioChunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    console.log('🎤 Recording stopped, audio blob created:', audioBlob);
+                    
+                    // TODO: Send audioBlob to Whisper API for transcription
+                    // For now, we'll simulate transcription
+                    simulateTranscription(audioBlob);
+                    
+                    // Stop all tracks
+                    stream.getTracks().forEach(track => track.stop());
+                };
+
+                mediaRecorder.start();
+                isRecording = true;
+                
+                // Update UI
+                voiceInputArea.classList.add('recording');
+                voiceInputArea.title = 'Click to Stop Recording';
+                recordingIndicator.style.display = 'flex';
+                commentTextarea.placeholder = 'Click to Stop Transcribing\nAny thoughts?';
+                
+                console.log('🎤 Recording started');
+                showMessage('Recording started...', false);
+                
+            } catch (error) {
+                console.error('❌ Error accessing microphone:', error);
+                showMessage('Unable to access microphone. Please check permissions.', true);
+            }
+        } else {
+            // Stop recording
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
             
-            const enhancedText = commentText
-                .replace(/\b\w+/g, word => word.charAt(0).toUpperCase() + word.slice(1)) // Capitalize first letter of each word
-                .replace(/\.\s*([a-z])/g, '. $1'.toUpperCase()) // Capitalize after periods
-                .replace(/\s+/g, ' ') // Remove extra spaces
-                .trim();
+            isRecording = false;
             
-            // Show the enhanced text in the comment field
-            document.getElementById('insightComment').value = enhancedText;
+            // Update UI
+            voiceInputArea.classList.remove('recording');
+            voiceInputArea.title = 'Click to Start Recording';
+            recordingIndicator.style.display = 'none';
+            commentTextarea.placeholder = 'Click to Input Voice Transcription\nAny thoughts?';
             
-            showMessage('Text enhanced! (Basic processing)');
-            
-        } catch (error) {
-            console.error('AI processing error:', error);
-            showMessage('AI processing failed, please try again', true);
-        } finally {
-            // Reset button state
-            aiProcessBtn.disabled = false;
-            aiProcessBtn.textContent = 'AI Summary';
+            console.log('🛑 Recording stopped');
+            showMessage('Recording stopped, processing...', false);
         }
     }
-    
-    // Handle voice input (placeholder for future Whisper integration)
-    function handleVoiceInput() {
-        const voiceArea = document.querySelector('.voice-input-area');
-        const voiceText = voiceArea.querySelector('.voice-text');
+
+    // Simulate transcription (replace with actual Whisper API call)
+    async function simulateTranscription(audioBlob) {
+        const commentTextarea = document.getElementById('insightComment');
         
-        // For now, just show a message that this will be implemented with Whisper
-        showMessage('Voice input will be available soon with Whisper integration!');
+        // Show processing state
+        commentTextarea.placeholder = 'Processing transcription...\nAny thoughts?';
+        
+        // Simulate API delay
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // For demo purposes, add some sample transcribed text
+        const sampleText = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.";
+        
+        // Append to existing text or replace if empty
+        const currentText = commentTextarea.value;
+        if (currentText.trim()) {
+            commentTextarea.value = currentText + '\n\n' + sampleText;
+        } else {
+            commentTextarea.value = sampleText;
+        }
+        
+        commentTextarea.placeholder = 'Click to Input Voice Transcription\nAny thoughts?';
+        
+        console.log('📝 Transcription completed (simulated)');
+        showMessage('Transcription completed!', false);
     }
     
     // Show AI preview modal
@@ -675,11 +725,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // Visit My Space button event listener
     document.getElementById('visitMySpaceBtn').addEventListener('click', handleVisitMySpace);
     
-    // AI Process button event listener
-    document.getElementById('aiProcessBtn').addEventListener('click', handleAIProcess);
+
     
     // Voice input area event listener
-    document.querySelector('.voice-input-area').addEventListener('click', handleVoiceInput);
+    document.getElementById('voiceInputArea').addEventListener('click', handleVoiceInput);
     
     // AI Preview modal event listeners
     document.getElementById('aiPreviewApply').addEventListener('click', applyAIText);

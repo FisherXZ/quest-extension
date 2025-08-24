@@ -512,16 +512,13 @@
 
         .comment-input-container {
             position: relative;
-            display: flex;
-            align-items: flex-start;
-            gap: 8px;
             margin-bottom: 10px;
         }
 
         .comment-input-container textarea {
-            flex: 1;
+            width: 100%;
             padding: 8px 12px;
-            padding-bottom: 40px; /* Make room for the AI button */
+            padding-left: 40px; /* Make room for the microphone icon */
             border: 1px solid #D9D9D9;
             border-radius: 8px;
             background: white;
@@ -530,6 +527,7 @@
             resize: vertical;
             min-height: 80px;
             font-family: inherit;
+            box-sizing: border-box;
         }
 
         .comment-input-container textarea:focus {
@@ -539,22 +537,21 @@
         }
 
         .voice-input-area {
+            position: absolute;
+            left: 8px;
+            top: 8px;
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 40px;
-            height: 40px;
-            border: 1px solid #D9D9D9;
-            border-radius: 8px;
-            background: #f8f9fa;
+            width: 24px;
+            height: 24px;
             cursor: pointer;
             transition: all 0.2s ease;
-            flex-shrink: 0;
+            z-index: 10;
         }
 
         .voice-input-area:hover {
-            border-color: #B699BB;
-            background: rgba(182, 153, 187, 0.1);
+            transform: scale(1.1);
         }
 
         .voice-input-area .microphone-icon {
@@ -568,39 +565,77 @@
             display: none; /* Hide text, only show icon */
         }
 
-        .ai-summary-btn {
-            position: absolute;
-            bottom: 8px;
-            right: 8px;
-            width: auto;
-            min-width: 80px;
-            padding: 6px 12px;
+        /* Recording state styles */
+        .voice-input-area.recording {
+            background: rgba(182, 153, 187, 0.1);
             border: 1px solid #B699BB;
-            border-radius: 6px;
+        }
+
+        .voice-input-area.recording .microphone-icon {
+            stroke: #e74c3c;
+        }
+
+        .voice-input-area.recording .microphone-icon {
+            position: relative;
+        }
+
+        .voice-input-area.recording .microphone-icon::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 2px;
+            height: 16px;
+            background: #e74c3c;
+            transform: translate(-50%, -50%) rotate(45deg);
+        }
+
+        .recording-indicator {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 8px;
             background: white;
-            color: #B699BB;
+            border: 1px solid #B699BB;
+            border-radius: 12px;
             font-size: 12px;
+            color: #B699BB;
             font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s ease;
             z-index: 10;
         }
 
-        .ai-summary-btn:hover {
-            background: #B699BB;
-            color: white;
+        .recording-dot {
+            width: 8px;
+            height: 8px;
+            background: #e74c3c;
+            border-radius: 50%;
+            animation: pulse 1.5s ease-in-out infinite;
         }
 
-        .ai-summary-btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
+        @keyframes pulse {
+            0% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            50% {
+                opacity: 0.5;
+                transform: scale(1.2);
+            }
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
         }
 
-        .ai-summary-btn svg {
-            width: 16px;
-            height: 16px;
-            filter: drop-shadow(0 1px 2px rgba(0,0,0,0.1));
+        .recording-text {
+            font-size: 11px;
+            font-weight: 600;
         }
+
+
 
 
 
@@ -701,8 +736,8 @@
             <div class="form-group">
                 <label for="insightComment">Comment (Optional)</label>
                 <div class="comment-input-container">
-                    <textarea id="insightComment" rows="4" placeholder="Any thoughts?&#10;&#10;Or click on 'AI Summary'"></textarea>
-                    <div class="voice-input-area" title="Click to Input Voice Message">
+                    <textarea id="insightComment" rows="4" placeholder="Click to Input Voice Transcription&#10;Any thoughts?"></textarea>
+                    <div class="voice-input-area" title="Click to Start Recording" id="voiceInputArea">
                         <svg class="microphone-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
                             <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
@@ -711,9 +746,10 @@
                         </svg>
                         <span class="voice-text">Click to Input Voice Message</span>
                     </div>
-                    <button type="button" id="aiProcessBtn" class="ai-summary-btn">
-                        AI Summary
-                    </button>
+                    <div class="recording-indicator" id="recordingIndicator" style="display: none;">
+                        <div class="recording-dot"></div>
+                        <span class="recording-text">Recording</span>
+                    </div>
                 </div>
             </div>
             <div class="form-group">
