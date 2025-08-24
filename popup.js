@@ -579,16 +579,89 @@ document.addEventListener('DOMContentLoaded', function() {
     let mediaRecorder = null;
     let audioChunks = [];
 
+    // Check microphone permission status
+    async function checkMicrophonePermission() {
+        try {
+            const result = await navigator.permissions.query({ name: 'microphone' });
+            console.log('Current microphone permission state:', result.state);
+            return result.state;
+        } catch (error) {
+            console.log('Permission API not supported, will request on demand');
+            return 'unknown';
+        }
+    }
+
+
+
     // Handle voice input
     async function handleVoiceInput() {
         const voiceInputArea = document.getElementById('voiceInputArea');
         const recordingIndicator = document.getElementById('recordingIndicator');
         const commentTextarea = document.getElementById('insightComment');
 
+        // Check if elements exist
+        if (!voiceInputArea) {
+            console.error('❌ voiceInputArea element not found');
+            showMessage('Voice input element not found', true);
+            return;
+        }
+        
+        if (!recordingIndicator) {
+            console.error('❌ recordingIndicator element not found');
+            showMessage('Recording indicator element not found', true);
+            return;
+        }
+        
+        if (!commentTextarea) {
+            console.error('❌ insightComment element not found');
+            showMessage('Comment textarea not found', true);
+            return;
+        }
+
         if (!isRecording) {
-            // Start recording
+            // Check permission status first
+            const permissionState = await checkMicrophonePermission();
+            console.log('Current permission state:', permissionState);
+            
+            if (permissionState === 'denied') {
+                showMessage('Microphone access is blocked. Please enable it in chrome://settings/content/microphone', true);
+                return;
+            }
+            
+            // Start recording - request permission through content script
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                console.log('🎤 Requesting microphone permission through content script...');
+                
+                // Try to get permission through content script first
+                const permissionResult = await new Promise((resolve, reject) => {
+                    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                        if (tabs[0] && tabs[0].url && !tabs[0].url.startsWith('chrome://')) {
+                            chrome.tabs.sendMessage(tabs[0].id, { action: 'requestMicrophonePermission' }, (response) => {
+                                if (chrome.runtime.lastError) {
+                                    console.log('Content script not available, trying direct request');
+                                    resolve({ success: true }); // Fallback to direct request
+                                } else {
+                                    resolve(response);
+                                }
+                            });
+                        } else {
+                            console.log('No suitable tab found, trying direct request');
+                            resolve({ success: true }); // Fallback to direct request
+                        }
+                    });
+                });
+                
+                console.log('Permission result:', permissionResult);
+                
+                if (!permissionResult.success) {
+                    throw new Error(permissionResult.error || 'Permission denied');
+                }
+                
+                // Now try to get the stream in popup
+                console.log('Testing microphone permission in popup...');
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: true
+                });
                 mediaRecorder = new MediaRecorder(stream);
                 audioChunks = [];
 
@@ -622,7 +695,70 @@ document.addEventListener('DOMContentLoaded', function() {
                 
             } catch (error) {
                 console.error('❌ Error accessing microphone:', error);
-                showMessage('Unable to access microphone. Please check permissions.', true);
+                
+                // Safely log error details
+                try {
+                    console.log('🔍 Error details:', {
+                        name: error?.name || 'Unknown',
+                        message: error?.message || 'Unknown error',
+                        stack: error?.stack || 'No stack trace'
+                    });
+                    
+                    // Log more detailed error information
+                    if (error instanceof DOMException) {
+                        console.log('DOMException details:', {
+                            name: error.name,
+                            message: error.message,
+                            code: error.code
+                        });
+                    }
+                    
+                    // Log the full error object
+                    console.log('Full error object:', error);
+                    console.log('Error type:', typeof error);
+                    console.log('Error constructor:', error?.constructor?.name || 'Unknown');
+                    console.log('Error toString():', error?.toString() || 'Cannot convert to string');
+                } catch (logError) {
+                    console.error('Error logging error details:', logError);
+                }
+                
+                // Handle different types of permission errors
+                const errorName = error?.name || 'Unknown';
+                const errorMessage = error?.message || '';
+                
+                if (errorName === 'NotAllowedError') {
+                    if (errorMessage.includes('Permission dismissed')) {
+                        showMessage('Microphone permission was denied. Click the microphone icon again to retry.', true);
+                    } else {
+                        showMessage('Microphone access denied. Please allow microphone access in your browser settings.', true);
+                    }
+                } else if (errorName === 'NotFoundError') {
+                    showMessage('No microphone found. Please connect a microphone and try again.', true);
+                } else if (errorName === 'NotSupportedError') {
+                    showMessage('Microphone not supported in this browser. Please use a modern browser.', true);
+                } else {
+                    showMessage('Unable to access microphone. Please check permissions and try again.', true);
+                }
+                
+                // Show helpful instructions for permission issues
+                if (errorName === 'NotAllowedError') {
+                    console.log('💡 To enable microphone access:');
+                    console.log('1. Click the microphone icon in the address bar');
+                    console.log('2. Select "Allow" for microphone access');
+                    console.log('3. Or go to chrome://settings/content/microphone');
+                    console.log('4. Try clicking the microphone icon in the main browser window');
+                    console.log('5. If still not working, try restarting Chrome browser');
+                    
+                    // Show user-friendly message
+                    showMessage('麦克风权限被拒绝。请尝试以下步骤：1) 点击地址栏右侧的麦克风图标并选择"允许" 2) 或重启浏览器后重试', true);
+                }
+                
+                // Reset UI state
+                isRecording = false;
+                voiceInputArea.classList.remove('recording');
+                voiceInputArea.title = 'Click to Start Recording';
+                recordingIndicator.style.display = 'none';
+                commentTextarea.placeholder = 'Click to Input Voice Transcription\nAny thoughts?';
             }
         } else {
             // Stop recording
@@ -728,7 +864,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
     
     // Voice input area event listener
-    document.getElementById('voiceInputArea').addEventListener('click', handleVoiceInput);
+    const voiceInputElement = document.getElementById('voiceInputArea');
+    if (voiceInputElement) {
+        voiceInputElement.addEventListener('click', handleVoiceInput);
+        console.log('✅ Voice input event listener added');
+    } else {
+        console.error('❌ Voice input element not found for event listener');
+    }
     
     // AI Preview modal event listeners
     document.getElementById('aiPreviewApply').addEventListener('click', applyAIText);

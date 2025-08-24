@@ -239,4 +239,24 @@ function init() {
 }
 
 // 启动监听
-init(); 
+init();
+
+// 监听来自popup的麦克风权限请求
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === 'requestMicrophonePermission') {
+        console.log('Content script: Requesting microphone permission');
+        
+        navigator.mediaDevices.getUserMedia({ audio: true })
+            .then(stream => {
+                console.log('Content script: Microphone permission granted');
+                stream.getTracks().forEach(track => track.stop());
+                sendResponse({ success: true, permission: 'granted' });
+            })
+            .catch(error => {
+                console.error('Content script: Microphone permission denied:', error);
+                sendResponse({ success: false, error: error.message });
+            });
+        
+        return true; // Keep message channel open
+    }
+}); 

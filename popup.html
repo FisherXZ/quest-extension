@@ -518,7 +518,8 @@
         .comment-input-container textarea {
             width: 100%;
             padding: 8px 12px;
-            padding-left: 40px; /* Make room for the microphone icon */
+            padding-left: 32px; /* Make room for the microphone icon */
+            padding-right: 65px; /* Make room for the recording indicator */
             border: 1px solid #D9D9D9;
             border-radius: 8px;
             background: white;
@@ -538,7 +539,7 @@
 
         .voice-input-area {
             position: absolute;
-            left: 8px;
+            left: 4px;
             top: 8px;
             display: flex;
             align-items: center;
@@ -592,24 +593,26 @@
 
         .recording-indicator {
             position: absolute;
-            top: 8px;
-            right: 8px;
+            top: 4px;
+            right: 4px;
             display: flex;
             align-items: center;
-            gap: 6px;
-            padding: 4px 8px;
+            gap: 3px;
+            padding: 2px 6px;
             background: white;
             border: 1px solid #B699BB;
-            border-radius: 12px;
-            font-size: 12px;
+            border-radius: 8px;
+            font-size: 9px;
             color: #B699BB;
             font-weight: 600;
             z-index: 10;
+            min-width: 55px;
+            justify-content: center;
         }
 
         .recording-dot {
-            width: 8px;
-            height: 8px;
+            width: 4px;
+            height: 4px;
             background: #e74c3c;
             border-radius: 50%;
             animation: pulse 1.5s ease-in-out infinite;
@@ -631,8 +634,14 @@
         }
 
         .recording-text {
-            font-size: 11px;
+            font-size: 8px;
             font-weight: 600;
+            white-space: nowrap;
+        }
+
+        /* Ensure recording indicator stays on top */
+        .recording-indicator {
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         }
 
 

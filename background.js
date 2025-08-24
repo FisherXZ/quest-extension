@@ -43,6 +43,26 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse({ success: true });
         return true;
     }
+    
+    // Handle microphone permission request
+    if (request.action === 'requestMicrophonePermission') {
+        console.log('Requesting microphone permission from background script');
+        
+        // Use async/await pattern for better error handling
+        (async () => {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                console.log('Microphone permission granted in background');
+                stream.getTracks().forEach(track => track.stop());
+                sendResponse({ success: true, permission: 'granted' });
+            } catch (error) {
+                console.error('Microphone permission denied in background:', error);
+                sendResponse({ success: false, error: error.message });
+            }
+        })();
+        
+        return true; // Keep message channel open
+    }
 });
 
     // Inject content script into Quest website
