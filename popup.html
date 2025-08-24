@@ -510,17 +510,46 @@
             margin-bottom: 10px;
         }
 
+        .comment-input-container {
+            position: relative;
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .comment-input-container textarea {
+            flex: 1;
+            padding: 8px 12px;
+            padding-bottom: 40px; /* Make room for the AI button */
+            border: 1px solid #D9D9D9;
+            border-radius: 8px;
+            background: white;
+            color: #1D1B20;
+            font-size: 14px;
+            resize: vertical;
+            min-height: 80px;
+            font-family: inherit;
+        }
+
+        .comment-input-container textarea:focus {
+            outline: none;
+            border-color: #B699BB;
+            box-shadow: 0 0 0 2px rgba(182, 153, 187, 0.2);
+        }
+
         .voice-input-area {
             display: flex;
             align-items: center;
-            gap: 8px;
-            padding: 8px 12px;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
             border: 1px solid #D9D9D9;
             border-radius: 8px;
             background: #f8f9fa;
             cursor: pointer;
             transition: all 0.2s ease;
-            margin-bottom: 8px;
+            flex-shrink: 0;
         }
 
         .voice-input-area:hover {
@@ -536,14 +565,7 @@
         }
 
         .voice-input-area .voice-text {
-            font-size: 13px;
-            color: #1D1B20;
-            font-weight: 500;
-        }
-
-        .comment-container textarea {
-            position: relative;
-            padding-bottom: 40px; /* Make room for the button */
+            display: none; /* Hide text, only show icon */
         }
 
         .ai-summary-btn {
@@ -678,8 +700,9 @@
             </div>
             <div class="form-group">
                 <label for="insightComment">Comment (Optional)</label>
-                <div class="comment-container">
-                    <div class="voice-input-area">
+                <div class="comment-input-container">
+                    <textarea id="insightComment" rows="4" placeholder="Any thoughts?&#10;&#10;Or click on 'AI Summary'"></textarea>
+                    <div class="voice-input-area" title="Click to Input Voice Message">
                         <svg class="microphone-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
                             <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
@@ -688,7 +711,6 @@
                         </svg>
                         <span class="voice-text">Click to Input Voice Message</span>
                     </div>
-                    <textarea id="insightComment" rows="4" placeholder="Any thoughts?&#10;&#10;Or click on 'AI Summary'"></textarea>
                     <button type="button" id="aiProcessBtn" class="ai-summary-btn">
                         AI Summary
                     </button>
