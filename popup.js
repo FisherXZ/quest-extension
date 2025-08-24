@@ -165,7 +165,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             const result = await response.json();
-            console.log('✅ Parsed login response:', result);
+                console.log('✅ Parsed login response:', result);
             
             if (result.success && result.data.access_token) {
                 currentUser = {
@@ -233,7 +233,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
 
             console.log('📥 Signup response status:', response.status);
-            
+
             if (!response.ok) {
                 const errorData = await response.json();
                 const errorMessage = errorData.detail || 'Registration failed';
@@ -242,7 +242,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             const result = await response.json();
-            console.log('✅ Parsed signup response:', result);
+                console.log('✅ Parsed signup response:', result);
             
             if (result.success && result.data.access_token) {
                 currentUser = {
@@ -624,7 +624,14 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('Current permission state:', permissionState);
             
             if (permissionState === 'denied') {
-                showMessage('Microphone access is blocked. Please enable it in chrome://settings/content/microphone', true);
+                showMessage('Microphone access is blocked. Opening extension settings...', true);
+                
+                // Open extension specific settings page
+                setTimeout(() => {
+                    chrome.tabs.create({ 
+                        url: 'chrome://settings/content/siteDetails?site=chrome-extension://jcjpicpelibofggpbbmajafjipppnojo' 
+                    });
+                }, 1000);
                 return;
             }
             
@@ -692,8 +699,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 console.log('🎤 Recording started');
                 showMessage('Recording started...', false);
-                
-            } catch (error) {
+            
+        } catch (error) {
                 console.error('❌ Error accessing microphone:', error);
                 
                 // Safely log error details
@@ -749,8 +756,21 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.log('4. Try clicking the microphone icon in the main browser window');
                     console.log('5. If still not working, try restarting Chrome browser');
                     
-                    // Show user-friendly message
-                    showMessage('麦克风权限被拒绝。请尝试以下步骤：1) 点击地址栏右侧的麦克风图标并选择"允许" 2) 或重启浏览器后重试', true);
+                    // Show user-friendly message and open settings
+                    showMessage('麦克风权限被拒绝。正在打开权限设置页面...', true);
+                    
+                    // Open Chrome settings page for microphone permissions
+                    setTimeout(() => {
+                        // Open specific extension permission settings page
+                        chrome.tabs.create({ 
+                            url: 'chrome://settings/content/siteDetails?site=chrome-extension://jcjpicpelibofggpbbmajafjipppnojo' 
+                        });
+                        
+                        // Show instructions
+                        setTimeout(() => {
+                            showMessage('请在权限设置页面中将麦克风权限设置为"允许"', false);
+                        }, 2000);
+                    }, 1000);
                 }
                 
                 // Reset UI state
@@ -958,7 +978,7 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('✅ User tags loaded:', result);
             
             if (result.success && result.data) {
-                // Update the tags display
+            // Update the tags display
                 updateTagsDisplay(result.data.map(tag => tag.name));
             }
             
