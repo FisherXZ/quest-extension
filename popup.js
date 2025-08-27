@@ -167,11 +167,15 @@ document.addEventListener('DOMContentLoaded', function() {
             const result = await response.json();
                 console.log('✅ Parsed login response:', result);
             
-            if (result.success && result.data.access_token) {
+            // Handle nested data structure from backend
+            const userData = result.data?.data || result.data;
+            console.log('🔍 Extracted user data:', userData);
+            
+            if (result.success && userData && userData.access_token) {
                 currentUser = {
-                    id: result.data.user_id,
-                    email: result.data.email,
-                    access_token: result.data.access_token
+                    id: userData.user_id || userData.user?.id,
+                    email: userData.email || userData.user?.email,
+                    access_token: userData.access_token
                 };
                 
                 console.log('👤 Current user set:', currentUser);
@@ -180,7 +184,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 await chrome.storage.local.set({
                     quest_user_session: {
                         user: currentUser,
-                        access_token: result.data.access_token,
+                        access_token: userData.access_token,
                         timestamp: Date.now()
                     }
                 });
@@ -236,7 +240,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (!response.ok) {
                 const errorData = await response.json();
-                const errorMessage = errorData.detail || 'Registration failed';
+                console.error('❌ Signup failed - Status:', response.status, 'Error data:', errorData);
+                const errorMessage = errorData.detail || errorData.message || 'Registration failed';
                 showMessage(errorMessage, true);
                 return;
             }
@@ -244,12 +249,16 @@ document.addEventListener('DOMContentLoaded', function() {
             const result = await response.json();
                 console.log('✅ Parsed signup response:', result);
             
-            if (result.success && result.data.access_token) {
+            // Handle nested data structure from backend
+            const userData = result.data?.data || result.data;
+            console.log('🔍 Extracted user data:', userData);
+            
+            if (result.success && userData && userData.access_token) {
                 currentUser = {
-                    id: result.data.user.id,
-                    email: result.data.user.email,
-                    nickname: result.data.user.nickname,
-                    access_token: result.data.access_token
+                    id: userData.user.id,
+                    email: userData.user.email,
+                    nickname: userData.user.nickname,
+                    access_token: userData.access_token
                 };
                 
                 console.log('👤 Current user set:', currentUser);
@@ -258,7 +267,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 await chrome.storage.local.set({
                     quest_user_session: {
                         user: currentUser,
-                        access_token: result.data.access_token,
+                        access_token: userData.access_token,
                         timestamp: Date.now()
                     }
                 });
