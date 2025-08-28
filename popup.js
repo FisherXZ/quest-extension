@@ -193,7 +193,22 @@ document.addEventListener('DOMContentLoaded', function() {
                 showUserInterface();
                 showMessage('Login successful!');
             } else {
-                showMessage('Login failed: No access token received', true);
+                console.error('❌ Login failed - Missing data:', {
+                    success: result.success,
+                    userData: userData,
+                    hasAccessToken: userData?.access_token ? 'Yes' : 'No',
+                    hasUserId: userData?.user_id || userData?.user?.id ? 'Yes' : 'No'
+                });
+                
+                if (!result.success) {
+                    showMessage('Login failed: ' + (result.message || 'Unknown error'), true);
+                } else if (!userData) {
+                    showMessage('Login failed: No user data received from server', true);
+                } else if (!userData.access_token) {
+                    showMessage('Login failed: Missing access token', true);
+                } else {
+                    showMessage('Login failed: Unknown error occurred', true);
+                }
             }
             
         } catch (error) {
@@ -253,30 +268,122 @@ document.addEventListener('DOMContentLoaded', function() {
             const userData = result.data?.data || result.data;
             console.log('🔍 Extracted user data:', userData);
             
-            if (result.success && userData && userData.access_token) {
-                currentUser = {
-                    id: userData.user.id,
-                    email: userData.user.email,
-                    nickname: userData.user.nickname,
-                    access_token: userData.access_token
-                };
-                
-                console.log('👤 Current user set:', currentUser);
-                
-                // Save session with token
-                await chrome.storage.local.set({
-                    quest_user_session: {
-                        user: currentUser,
-                        access_token: userData.access_token,
-                        timestamp: Date.now()
+            // Additional debugging for token location
+            console.log('🔍 Detailed token analysis:', {
+                'result.data?.access_token': result.data?.access_token,
+                'result.data?.data?.access_token': result.data?.data?.access_token,
+                'userData?.access_token': userData?.access_token,
+                'result.access_token': result.access_token,
+                'Full result structure': result
+            });
+            
+            // Try to get access token from multiple possible locations
+            const accessToken = userData?.access_token || 
+                               result.data?.access_token || 
+                               result.access_token;
+            
+            console.log('🔍 Final access token:', accessToken);
+            
+            if (result.success && userData && userData.user) {
+                // Registration successful, but backend doesn't return access_token
+                // Need to auto-login to get the token
+                if (!accessToken) {
+                    console.log('🔄 Registration successful, but no token returned. Auto-logging in...');
+                    showMessage('Registration successful! Logging you in...');
+                    
+                    // Auto-login to get access token
+                    try {
+                        const loginResponse = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                email: userData.user.email,
+                                password: password // Use the password from signup
+                            })
+                        });
+                        
+                        if (loginResponse.ok) {
+                            const loginResult = await loginResponse.json();
+                            console.log('🔄 Auto-login response:', loginResult);
+                            
+                            if (loginResult.success && loginResult.data?.access_token) {
+                                currentUser = {
+                                    id: loginResult.data.user_id || userData.user.id,
+                                    email: loginResult.data.email || userData.user.email,
+                                    nickname: userData.user.nickname,
+                                    access_token: loginResult.data.access_token
+                                };
+                                
+                                // Save session with token
+                                await chrome.storage.local.set({
+                                    quest_user_session: {
+                                        user: currentUser,
+                                        access_token: loginResult.data.access_token,
+                                        timestamp: Date.now()
+                                    }
+                                });
+                                
+                                console.log('✅ Auto-login successful, session saved');
+                                showUserInterface();
+                                showMessage('Registration and login successful!');
+                                return;
+                            }
+                        }
+                    } catch (loginError) {
+                        console.error('❌ Auto-login failed:', loginError);
                     }
+                }
+                
+                // If we have access token from registration (unlikely based on API test)
+                if (accessToken) {
+                    currentUser = {
+                        id: userData.user.id,
+                        email: userData.user.email,
+                        nickname: userData.user.nickname,
+                        access_token: accessToken
+                    };
+                    
+                    console.log('👤 Current user set:', currentUser);
+                    
+                    // Save session with token
+                    await chrome.storage.local.set({
+                        quest_user_session: {
+                            user: currentUser,
+                            access_token: accessToken,
+                            timestamp: Date.now()
+                        }
+                    });
+                    
+                    console.log('✅ Session saved successfully');
+                    showUserInterface();
+                    showMessage('Registration successful!');
+                    return;
+                }
+                
+                // If auto-login failed, show success but require manual login
+                showMessage('Registration successful! Please login to continue.', false);
+            } else {
+                console.error('❌ Registration failed - Missing data:', {
+                    success: result.success,
+                    userData: userData,
+                    hasAccessToken: accessToken ? 'Yes' : 'No',
+                    hasUser: userData?.user ? 'Yes' : 'No',
+                    accessTokenValue: accessToken
                 });
                 
-                console.log('✅ Session saved successfully');
-                showUserInterface();
-                showMessage('Registration successful!');
-            } else {
-                showMessage('Registration failed: No user data received', true);
+                if (!result.success) {
+                    showMessage('Registration failed: ' + (result.message || 'Unknown error'), true);
+                } else if (!userData) {
+                    showMessage('Registration failed: No user data received from server', true);
+                } else if (!accessToken) {
+                    showMessage('Registration failed: Missing access token', true);
+                } else if (!userData.user) {
+                    showMessage('Registration failed: Missing user information', true);
+                } else {
+                    showMessage('Registration failed: Unknown error occurred', true);
+                }
             }
             
         } catch (error) {
