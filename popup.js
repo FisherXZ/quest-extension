@@ -328,37 +328,37 @@ document.addEventListener('DOMContentLoaded', function() {
                                 console.log('✅ Auto-login successful, session saved');
                                 showUserInterface();
                                 showMessage('Registration and login successful!');
-                                return;
+                return;
                             }
                         }
                     } catch (loginError) {
                         console.error('❌ Auto-login failed:', loginError);
                     }
-                }
-                
+            }
+            
                 // If we have access token from registration (unlikely based on API test)
                 if (accessToken) {
-                    currentUser = {
+                currentUser = {
                         id: userData.user.id,
                         email: userData.user.email,
                         nickname: userData.user.nickname,
                         access_token: accessToken
-                    };
-                    
-                    console.log('👤 Current user set:', currentUser);
-                    
-                    // Save session with token
-                    await chrome.storage.local.set({
-                        quest_user_session: {
-                            user: currentUser,
+                };
+                
+                console.log('👤 Current user set:', currentUser);
+                
+                // Save session with token
+                await chrome.storage.local.set({
+                    quest_user_session: {
+                        user: currentUser,
                             access_token: accessToken,
-                            timestamp: Date.now()
-                        }
-                    });
-                    
-                    console.log('✅ Session saved successfully');
-                    showUserInterface();
-                    showMessage('Registration successful!');
+                        timestamp: Date.now()
+                    }
+                });
+                
+                console.log('✅ Session saved successfully');
+                showUserInterface();
+                showMessage('Registration successful!');
                     return;
                 }
                 
@@ -571,8 +571,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // Selected tags array
+    // Selected tags array - stores tag objects with id and name
     let selectedTags = [];
+    // Available tags array - stores all user tags with full data
+    let availableTags = [];
     
     // Update selected tags display
     function updateSelectedTagsDisplay() {
@@ -583,25 +585,25 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Add selected state for selected tags
         selectedTags.forEach(tag => {
-            const tagElement = document.querySelector(`[data-tag="${tag}"]`);
+            const tagElement = document.querySelector(`[data-tag-id="${tag.id}"]`);
             if (tagElement) {
                 tagElement.classList.add('selected');
             }
         });
     }
     
-    // Add tag
-    function addTag(tag) {
-        tag = tag.trim().toLowerCase();
-        if (tag && !selectedTags.includes(tag)) {
-            selectedTags.push(tag);
+    // Add tag by ID
+    function addTag(tagId) {
+        const tagObj = availableTags.find(t => t.id === tagId);
+        if (tagObj && !selectedTags.find(t => t.id === tagId)) {
+            selectedTags.push(tagObj);
             updateSelectedTagsDisplay();
         }
     }
     
-    // Remove tag
-    function removeTag(tag) {
-        selectedTags = selectedTags.filter(t => t !== tag);
+    // Remove tag by ID
+    function removeTag(tagId) {
+        selectedTags = selectedTags.filter(t => t.id !== tagId);
         updateSelectedTagsDisplay();
     }
     
@@ -646,14 +648,30 @@ document.addEventListener('DOMContentLoaded', function() {
                 body: JSON.stringify({
                     url: url,
                     thought: thought || '',
-                    tag_ids: selectedTags // This will be updated to use actual tag IDs
+                    tag_ids: selectedTags.map(tag => tag.id) // Extract tag IDs
                 })
             });
 
             if (!response.ok) {
                 const errorData = await response.json();
                 console.error('❌ Server validation failed:', errorData);
-                const errorMessage = errorData.detail || 'Save failed';
+                console.error('🔍 Request body was:', {
+                    url: url,
+                    thought: thought || '',
+                    tag_ids: selectedTags.map(tag => tag.id)
+                });
+                console.error('🔍 Selected tags:', selectedTags);
+                console.error('🔍 Selected tag IDs:', selectedTags.map(tag => tag.id));
+                
+                // Show detailed error message
+                let errorMessage = 'Save failed';
+                if (errorData.detail) {
+                    if (Array.isArray(errorData.detail)) {
+                        errorMessage = errorData.detail.map(err => err.msg || err.message || err).join(', ');
+                    } else {
+                        errorMessage = errorData.detail;
+                    }
+                }
                 showMessage(errorMessage, true);
                 return;
             }
@@ -1023,13 +1041,13 @@ document.addEventListener('DOMContentLoaded', function() {
     document.addEventListener('click', function(event) {
         if (event.target.classList.contains('tag-option')) {
             const tagElement = event.target;
-            const tag = tagElement.dataset.tag;
+            const tagId = tagElement.dataset.tagId;
             
             tagElement.classList.toggle('selected');
             if (tagElement.classList.contains('selected')) {
-                addTag(tag);
+                addTag(tagId);
             } else {
-                removeTag(tag);
+                removeTag(tagId);
             }
         }
     });
@@ -1094,8 +1112,10 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('✅ User tags loaded:', result);
             
             if (result.success && result.data) {
-            // Update the tags display
-                updateTagsDisplay(result.data.map(tag => tag.name));
+                // Store all available tags with full data
+                availableTags = result.data;
+                // Update the tags display
+                updateTagsDisplay(result.data);
             }
             
         } catch (error) {
@@ -1104,7 +1124,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Update tags display
-    function updateTagsDisplay(tagNames) {
+    function updateTagsDisplay(tags) {
         // Clear existing tag selector
         const tagSelector = document.getElementById('tagSelector');
         
@@ -1113,13 +1133,14 @@ document.addEventListener('DOMContentLoaded', function() {
         existingTags.forEach(tag => tag.remove());
         
         // Add all user tags
-        tagNames.forEach(tagName => {
+        tags.forEach(tag => {
             const tagElement = document.createElement('div');
             tagElement.className = 'tag-option';
-            tagElement.setAttribute('data-tag', tagName);
+            tagElement.setAttribute('data-tag-id', tag.id);
+            tagElement.setAttribute('data-tag-name', tag.name);
             tagElement.style.borderColor = '#007bff'; // Default color
             tagElement.style.color = '#007bff';
-            tagElement.textContent = tagName.charAt(0).toUpperCase() + tagName.slice(1);
+            tagElement.textContent = tag.name.charAt(0).toUpperCase() + tag.name.slice(1);
             tagSelector.appendChild(tagElement);
         });
     }
