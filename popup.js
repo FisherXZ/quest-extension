@@ -147,7 +147,7 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             console.log('🔐 Attempting login with email:', email);
             
-            const response = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
+            const response = await fetch(`${API_BASE_URL}/api/v1/auth/login/`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -239,7 +239,7 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             console.log('🔐 Attempting signup with email:', email);
             
-            const response = await fetch(`${API_BASE_URL}/api/v1/auth/register`, {
+            const response = await fetch(`${API_BASE_URL}/api/v1/auth/register/`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -293,7 +293,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                     // Auto-login to get access token
                     try {
-                        const loginResponse = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
+                        const loginResponse = await fetch(`${API_BASE_URL}/api/v1/auth/login/`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json'
@@ -402,7 +402,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (accessToken) {
                 // Call the backend signout API
                 try {
-                    await fetch(`${API_BASE_URL}/api/v1/auth/signout`, {
+                    await fetch(`${API_BASE_URL}/api/v1/auth/signout/`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -513,7 +513,7 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('🔄 Exchanging authorization code for user info...');
         try {
             // Call backend API to exchange code for user info
-            const response = await fetch(`${API_BASE_URL}/api/v1/auth/google`, {
+            const response = await fetch(`${API_BASE_URL}/api/v1/auth/google/`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -654,7 +654,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (!response.ok) {
                 const errorData = await response.json();
-                console.error('❌ Server validation failed:', errorData);
+                console.error('❌ Server error:', response.status, errorData);
                 console.error('🔍 Request body was:', {
                     url: url,
                     thought: thought || '',
@@ -662,6 +662,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
                 console.error('🔍 Selected tags:', selectedTags);
                 console.error('🔍 Selected tag IDs:', selectedTags.map(tag => tag.id));
+                console.error('🔍 Available tags:', availableTags);
+                console.error('🔍 URL:', url);
+                console.error('🔍 Thought:', thought);
                 
                 // Show detailed error message
                 let errorMessage = 'Save failed';
@@ -677,9 +680,25 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             const result = await response.json();
-            console.log('Save insight result:', result);
+            console.log('✅ Insight saved:', result);
             
-            showMessage('Saved to collection!');
+            // Check if the response contains the insight data
+            if (result.success && result.data) {
+                console.log('📝 Created insight:', {
+                    id: result.data.id,
+                    title: result.data.title,
+                    description: result.data.description,
+                    url: result.data.url,
+                    image_url: result.data.image_url,
+                    thought: result.data.thought,
+                    tags: result.data.tags
+                });
+                showMessage('Saved to collection!');
+            } else {
+                console.log('⚠️ Unexpected response format:', result);
+                showMessage('Saved successfully!');
+            }
+            
             document.getElementById('insightUrl').value = '';
             document.getElementById('insightTitle').value = '';
             document.getElementById('insightComment').value = '';
@@ -1097,7 +1116,7 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('🔄 Loading user tags...');
             
             // Use new API endpoint
-            const response = await fetch(`${API_BASE_URL}/api/v1/user-tags`, {
+            const response = await fetch(`${API_BASE_URL}/api/v1/user-tags/`, {
                 headers: {
                     'Authorization': `Bearer ${accessToken}`
                 }
@@ -1114,7 +1133,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (result.success && result.data) {
                 // Store all available tags with full data
                 availableTags = result.data;
-                // Update the tags display
+            // Update the tags display
                 updateTagsDisplay(result.data);
             }
             
