@@ -15,12 +15,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Use new backend API endpoints
     const API_BASE_URL = 'https://quest-api-edz1.onrender.com';
     
-    // Google OAuth configuration
-    const GOOGLE_CLIENT_ID = '103202343935-5dkesvf5dp06af09o0d2373ji2ccd0rc.apps.googleusercontent.com';
-    const GOOGLE_SCOPES = [
-        'https://www.googleapis.com/auth/userinfo.email',
-        'https://www.googleapis.com/auth/userinfo.profile'
-    ];
+    // Google OAuth configuration is now handled by backend
+    // Client ID, scopes, and other parameters are fetched from /api/v1/auth/google/login
     
     // Show message
     function showMessage(message, isError = false) {
@@ -428,28 +424,66 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // Handle Google OAuth authentication
+    // Handle Google OAuth authentication using ID Token approach
     async function handleGoogleAuth() {
-        console.log('🔐 Starting Google OAuth flow...');
+        console.log('🔐 Starting Google OAuth flow with ID Token...');
         try {
-            // Use Chrome extension's redirect URL
+            // Step 1: Get OAuth configuration from backend to get client_id
+            console.log('📡 Fetching OAuth configuration from backend...');
+            const configResponse = await fetch(`${API_BASE_URL}/api/v1/auth/google/login`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!configResponse.ok) {
+                const errorData = await configResponse.json();
+                throw new Error(errorData.detail || 'Failed to get OAuth configuration');
+            }
+            
+            const configResult = await configResponse.json();
+            console.log('✅ Backend OAuth config:', configResult);
+            
+            if (!configResult.success || !configResult.data) {
+                throw new Error('Invalid OAuth configuration response from backend');
+            }
+            
+            // Step 2: Use backend's OAuth URL but modify for Chrome extension
+            const backendOAuthUrl = configResult.data.oauth_url;
+            const { client_id, scope } = configResult.data;
             const redirectUri = chrome.identity.getRedirectURL();
             console.log('🔄 Extension redirect URL:', redirectUri);
+            console.log('🔄 Backend OAuth URL:', backendOAuthUrl);
             
-            // Generate state parameter for security
-            const state = Math.random().toString(36).substring(7);
+            // Parse the backend URL and modify for Chrome extension
+            const oauthUrl = new URL(backendOAuthUrl);
             
-            // Build OAuth URL
-            const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-                `client_id=${GOOGLE_CLIENT_ID}&` +
-                `response_type=code&` +
-                `scope=${encodeURIComponent(GOOGLE_SCOPES.join(' '))}&` +
-                `redirect_uri=${encodeURIComponent(redirectUri)}&` +
-                `state=${state}&` +
-                `access_type=offline&` +
-                `prompt=consent`;
+            // Update parameters for Chrome extension
+            oauthUrl.searchParams.set('response_type', 'id_token');  // Request ID token directly
+            oauthUrl.searchParams.set('redirect_uri', redirectUri);  // Use extension redirect URI
+            oauthUrl.searchParams.set('nonce', Math.random().toString(36).substring(7));  // Required for ID toke
             
-            console.log('📡 Launching Chrome identity OAuth flow...');
+            // Ensure proper scopes for ID token
+            const requiredScopes = 'openid email profile';
+            oauthUrl.searchParams.set('scope', requiredScopes);
+            
+            // Remove parameters that are not compatible with id_token flow
+            oauthUrl.searchParams.delete('include_granted_scopes');  // Not allowed with id_token
+            oauthUrl.searchParams.delete('access_type');  // Not needed for id_token
+            oauthUrl.searchParams.delete('state');  // We'll use nonce instead
+            
+            const authUrl = oauthUrl.toString();
+            
+            console.log('📡 Launching Chrome identity OAuth flow for ID token...');
+            console.log('🔍 Final OAuth URL:', authUrl);
+            console.log('🔍 URL components:', {
+                client_id: oauthUrl.searchParams.get('client_id'),
+                response_type: oauthUrl.searchParams.get('response_type'),
+                redirect_uri: oauthUrl.searchParams.get('redirect_uri'),
+                scope: oauthUrl.searchParams.get('scope'),
+                nonce: oauthUrl.searchParams.get('nonce')
+            });
             
             const authResult = await chrome.identity.launchWebAuthFlow({
                 url: authUrl,
@@ -460,7 +494,18 @@ document.addEventListener('DOMContentLoaded', function() {
             
             if (chrome.runtime.lastError) {
                 console.error('❌ OAuth error:', chrome.runtime.lastError);
-                showMessage('Google authentication failed: ' + chrome.runtime.lastError.message, true);
+                console.error('🔍 Error details:', {
+                    message: chrome.runtime.lastError.message,
+                    authUrl: authUrl,
+                    redirectUri: redirectUri
+                });
+                
+                // Provide specific guidance based on error
+                if (chrome.runtime.lastError.message.includes('Authorization page could not be loaded')) {
+                    showMessage('OAuth configuration error. Please check Google Cloud Console settings for the Chrome extension OAuth client.', true);
+                } else {
+                    showMessage('Google authentication failed: ' + chrome.runtime.lastError.message, true);
+                }
                 return;
             }
             
@@ -474,33 +519,31 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             
-            // Extract authorization code from URL
+            // Extract ID token from URL fragment (not query params)
             const url = new URL(authResult);
-            const code = url.searchParams.get('code');
-            const returnedState = url.searchParams.get('state');
+            const fragment = url.hash.substring(1); // Remove # 
+            const params = new URLSearchParams(fragment);
+            const idToken = params.get('id_token');
             
             console.log('🔍 Extracted from OAuth response:');
-            console.log('  - Authorization Code:', code ? 'Present' : 'Missing');
-            console.log('  - State:', returnedState);
-            console.log('  - Expected State:', state);
+            console.log('  - Full URL:', authResult);
+            console.log('  - Fragment:', fragment);
+            console.log('  - ID Token:', idToken ? 'Present' : 'Missing');
+            console.log('  - All fragment params:', Array.from(params.entries()));
             
-            // Verify state parameter
-            if (returnedState !== state) {
-                console.error('❌ State mismatch - possible CSRF attack');
-                showMessage('Security error: State mismatch', true);
+            if (!idToken) {
+                console.error('❌ No ID token found in response');
+                showMessage('No ID token received from Google', true);
                 return;
             }
             
-            if (!code) {
-                console.error('❌ No authorization code found in response');
-                showMessage('No authorization code received from Google', true);
-                return;
-            }
+            console.log('✅ ID token received successfully');
             
-            console.log('✅ Authorization code received successfully');
+            // Note: No state verification needed since we removed state parameter
+            // and are using nonce for security (nonce is verified by Google)
             
-            // Exchange authorization code for user info using backend
-            await exchangeCodeForUserInfo(code);
+            // Send ID token to backend for authentication
+            await authenticateWithIdToken(idToken);
             
         } catch (error) {
             console.error('❌ Google auth error:', error);
@@ -508,53 +551,134 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // Exchange authorization code for user info using backend API
-    async function exchangeCodeForUserInfo(code) {
-        console.log('🔄 Exchanging authorization code for user info...');
+    // Extract email from Google ID Token
+    function extractEmailFromIdToken(idToken) {
         try {
-            // Call backend API to exchange code for user info
-            const response = await fetch(`${API_BASE_URL}/api/v1/auth/google/`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    code: code,
-                    redirect_uri: chrome.identity.getRedirectURL()
-                })
-            });
+            // ID Token format: header.payload.signature
+            const parts = idToken.split('.');
+            if (parts.length !== 3) {
+                return null;
+            }
             
-            console.log('📥 Google auth response status:', response.status);
+            // Decode the payload (base64url)
+            const payload = parts[1];
+            // Add padding if needed
+            const paddedPayload = payload + '='.repeat((4 - payload.length % 4) % 4);
+            const decodedPayload = atob(paddedPayload.replace(/-/g, '+').replace(/_/g, '/'));
+            const userInfo = JSON.parse(decodedPayload);
+            
+            return userInfo.email || null;
+        } catch (error) {
+            console.error('❌ Failed to extract email from ID token:', error);
+            return null;
+        }
+    }
+
+    // Authenticate using Google ID Token with backend API
+    async function authenticateWithIdToken(idToken) {
+                    console.log('🔄 Authenticating with Google ID Token...');
+            try {
+                // Prepare form data for ID token authentication
+                const formData = new URLSearchParams();
+                formData.append('id_token', idToken);
+                
+                console.log('🔍 ID Token details:');
+                console.log('  - First 50 chars:', idToken.substring(0, 50) + '...');
+                console.log('  - Last 50 chars:', '...' + idToken.substring(idToken.length - 50));
+                console.log('  - Total length:', idToken.length);
+                console.log('  - Contains dots:', idToken.split('.').length, 'segments');
+                
+                // Call backend API to authenticate with ID token
+                const response = await fetch(`${API_BASE_URL}/api/v1/auth/google/token`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: formData
+                });
+            
+            console.log('📥 Google ID token response status:', response.status);
             
             if (!response.ok) {
                 const errorData = await response.json();
-                const errorMessage = errorData.detail || 'Google authentication failed';
-                showMessage(errorMessage, true);
+                const errorMessage = errorData.detail || errorData.message || 'Google authentication failed';
+                console.error('❌ Google ID token error:', errorData);
+                console.error('🔍 Request details:');
+                console.error('  - ID Token length:', idToken.length);
+                console.error('  - Form data:', Array.from(formData.entries()));
+                console.error('  - Response status:', response.status);
+                console.error('  - Error data:', errorData);
+                console.error('🔍 Full error message:', errorMessage);
+                
+                // Check for specific error types
+                if (errorMessage.includes('column') && errorMessage.includes('does not exist')) {
+                    showMessage('Backend database configuration issue. Please contact support.', true);
+                    console.error('🚨 Database schema error detected - backend needs database migration');
+                } else if (errorMessage.includes('profiles.email')) {
+                    showMessage('Backend database schema issue with profiles table. Please contact support.', true);
+                    console.error('🚨 Profiles.email column error - backend still referencing profiles table');
+                } else if (errorMessage.includes("'provider' column of 'profiles'")) {
+                    showMessage('Backend database issue: profiles.provider column missing. Backend needs to be updated.', true);
+                    console.error('🚨 PGRST204: Backend code still references profiles.provider column which was removed');
+                    console.error('💡 Solution: Remove all references to profiles.provider in backend Google OAuth code');
+                } else if (errorMessage.includes('A user with this email address has already been registered')) {
+                    // Extract email from ID token for better UX
+                    const extractedEmail = extractEmailFromIdToken(idToken);
+                    showMessage(`This Google account (${extractedEmail}) is already registered. Please use regular login with your password, or try password reset.`, true);
+                    console.error('🔍 User account conflict - Google email already exists in system');
+                    
+                    // Auto-fill login form with Google email
+                    const emailInput = document.getElementById('loginEmail');
+                    if (emailInput && extractedEmail) {
+                        emailInput.value = extractedEmail;
+                        emailInput.focus();
+                        
+                        // Focus on password field
+                        setTimeout(() => {
+                            const passwordInput = document.getElementById('loginPassword');
+                            if (passwordInput) {
+                                passwordInput.focus();
+                                passwordInput.placeholder = 'Enter your existing password';
+                            }
+                        }, 100);
+                    }
+                } else {
+                    // Show the actual backend error message to user
+                    showMessage(`Google authentication failed: ${errorMessage}`, true);
+                }
                 return;
             }
             
             const result = await response.json();
-            console.log('✅ Google auth response:', result);
+            console.log('✅ Google ID token response:', result);
             
             if (result.success && result.data.access_token) {
+                // Extract user data from Supabase native response format
+                const userData = result.data.user;
+                const sessionData = result.data.session || result.data;
+                
                 currentUser = {
-                    id: result.data.user_id,
-                    email: result.data.email,
-                    nickname: result.data.nickname || result.data.email.split('@')[0],
-                    picture: result.data.picture || null, // Google profile picture
-                    access_token: result.data.access_token,
+                    id: userData.id,
+                    email: userData.email,
+                    username: userData.username || userData.email.split('@')[0],
+                    nickname: userData.nickname || userData.user_metadata?.name || userData.email.split('@')[0],
+                    picture: userData.picture || userData.user_metadata?.picture || null,
+                    access_token: sessionData.access_token,
                     provider: 'google'
                 };
                 
                 console.log('👤 Google user set:', currentUser);
+                console.log('📝 Response message:', result.message);
                 
-                // Save session with token
+                // Save session with token (Supabase format)
                 await chrome.storage.local.set({
                     quest_user_session: {
                         user: currentUser,
-                        access_token: result.data.access_token,
+                        access_token: sessionData.access_token,
+                        refresh_token: sessionData.refresh_token,
                         timestamp: Date.now(),
-                        provider: 'google'
+                        provider: 'google',
+                        supabase_session: sessionData
                     }
                 });
                 
@@ -566,7 +690,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
         } catch (error) {
-            console.error('❌ Code exchange error:', error);
+            console.error('❌ ID token authentication error:', error);
             showMessage('Google authentication failed: ' + error.message, true);
         }
     }
@@ -638,6 +762,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
+            console.log('🔍 Insights API token info:', {
+                length: accessToken.length,
+                prefix: accessToken.substring(0, 20) + '...',
+                provider: session.quest_user_session?.provider,
+                user_id: session.quest_user_session?.user?.id
+            });
+
             // Use new API endpoint for creating insight
             const response = await fetch(`${API_BASE_URL}/api/v1/insights`, {
                 method: 'POST',
@@ -693,7 +824,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     thought: result.data.thought,
                     tags: result.data.tags
                 });
-                showMessage('Saved to collection!');
+            showMessage('Saved to collection!');
             } else {
                 console.log('⚠️ Unexpected response format:', result);
                 showMessage('Saved successfully!');
@@ -1114,6 +1245,12 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             console.log('🔄 Loading user tags...');
+            console.log('🔍 Access token info:', {
+                length: accessToken.length,
+                prefix: accessToken.substring(0, 20) + '...',
+                provider: session.quest_user_session?.provider,
+                user_id: session.quest_user_session?.user?.id
+            });
             
             // Use new API endpoint
             const response = await fetch(`${API_BASE_URL}/api/v1/user-tags/`, {
