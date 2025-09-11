@@ -2,6 +2,7 @@
 *.crx
 *.pem
 key.pem
+js/config/config.js
 
 # Development files
 .DS_Store

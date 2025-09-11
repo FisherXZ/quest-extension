@@ -113,6 +113,10 @@ quest-extension/
 git clone https://github.com/your-username/quest-extension.git
 cd quest-extension
 
+# 配置API密钥
+cp js/config/config.example.js js/config/config.js
+# 编辑js/config/config.js并添加你的OpenAI API密钥
+
 # 在Chrome中加载扩展
 # 1. 打开 chrome://extensions/
 # 2. 开启开发者模式
