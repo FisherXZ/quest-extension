@@ -241,7 +241,12 @@ function init() {
 // 启动监听
 init();
 
-// 监听来自popup的麦克风权限请求
+// Recording variables for content script
+let mediaRecorder = null;
+let audioChunks = [];
+let currentStream = null;
+
+// 监听来自popup的麦克风权限请求和录音操作
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'requestMicrophonePermission') {
         console.log('Content script: Requesting microphone permission');
@@ -258,5 +263,70 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             });
         
         return true; // Keep message channel open
+    }
+    
+    // Handle recording start
+    if (request.action === 'startRecording') {
+        console.log('Content script: Starting recording');
+        
+        navigator.mediaDevices.getUserMedia({ audio: true })
+            .then(stream => {
+                currentStream = stream;
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                    }
+                };
+                
+                mediaRecorder.onstop = () => {
+                    console.log('Content script: Recording stopped, creating audio blob');
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    
+                    // Convert blob to base64 for message passing
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        chrome.runtime.sendMessage({
+                            action: 'recordingComplete',
+                            audioData: reader.result,
+                            audioSize: audioBlob.size
+                        });
+                    };
+                    reader.readAsDataURL(audioBlob);
+                    
+                    // Clean up stream
+                    if (currentStream) {
+                        currentStream.getTracks().forEach(track => track.stop());
+                        currentStream = null;
+                    }
+                };
+                
+                mediaRecorder.start();
+                console.log('Content script: Recording started successfully');
+                sendResponse({ success: true, message: 'Recording started' });
+            })
+            .catch(error => {
+                console.error('Content script: Recording failed:', error);
+                sendResponse({ success: false, error: error.message });
+            });
+            
+        return true;
+    }
+    
+    // Handle recording stop
+    if (request.action === 'stopRecording') {
+        console.log('Content script: Stopping recording');
+        
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+            sendResponse({ success: true, message: 'Recording stopped' });
+        } else {
+            console.warn('Content script: No active recording to stop');
+            sendResponse({ success: false, error: 'No active recording' });
+        }
+        
+        return true;
     }
 }); 

@@ -877,209 +877,104 @@ document.addEventListener('DOMContentLoaded', function() {
 
 
 
-    // Handle voice input
+    // Handle voice input - SIMPLIFIED VERSION
     async function handleVoiceInput() {
+        // 1. GET UI ELEMENTS
         const voiceInputArea = document.getElementById('voiceInputArea');
         const recordingIndicator = document.getElementById('recordingIndicator');
         const commentTextarea = document.getElementById('insightComment');
 
-        // Check if elements exist
-        if (!voiceInputArea) {
-            console.error('❌ voiceInputArea element not found');
-            showMessage('Voice input element not found', true);
-            return;
-        }
-        
-        if (!recordingIndicator) {
-            console.error('❌ recordingIndicator element not found');
-            showMessage('Recording indicator element not found', true);
-            return;
-        }
-        
-        if (!commentTextarea) {
-            console.error('❌ insightComment element not found');
-            showMessage('Comment textarea not found', true);
+        // Check if required elements exist
+        if (!voiceInputArea || !recordingIndicator || !commentTextarea) {
+            console.error('❌ Required UI elements not found');
+            showMessage('Voice input elements not found', true);
             return;
         }
 
+        // 2. START OR STOP RECORDING
         if (!isRecording) {
-            // Check permission status first
-            const permissionState = await checkMicrophonePermission();
-            console.log('Current permission state:', permissionState);
-            
-            if (permissionState === 'denied') {
-                showMessage('Microphone access is blocked. Opening extension settings...', true);
-                
-                // Open extension specific settings page
-                setTimeout(() => {
-                    chrome.tabs.create({ 
-                        url: 'chrome://settings/content/siteDetails?site=chrome-extension://jcjpicpelibofggpbbmajafjipppnojo' 
-                    });
-                }, 1000);
-                return;
-            }
-            
-            // Start recording - request permission through content script
+            // START RECORDING via Content Script
             try {
-                console.log('🎤 Requesting microphone permission through content script...');
+                console.log('🎤 Starting recording via content script...');
                 
-                // Try to get permission through content script first
-                const permissionResult = await new Promise((resolve, reject) => {
+                // Send message to content script to start recording
+                const result = await new Promise((resolve) => {
                     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
                         if (tabs[0] && tabs[0].url && !tabs[0].url.startsWith('chrome://')) {
-                            chrome.tabs.sendMessage(tabs[0].id, { action: 'requestMicrophonePermission' }, (response) => {
+                            chrome.tabs.sendMessage(tabs[0].id, { action: 'startRecording' }, (response) => {
                                 if (chrome.runtime.lastError) {
-                                    console.log('Content script not available, trying direct request');
-                                    resolve({ success: true }); // Fallback to direct request
+                                    console.error('Content script error:', chrome.runtime.lastError.message);
+                                    resolve({ success: false, error: 'Content script not available. Please refresh the page.' });
                                 } else {
-                                    resolve(response);
+                                    resolve(response || { success: false, error: 'No response from content script' });
                                 }
                             });
                         } else {
-                            console.log('No suitable tab found, trying direct request');
-                            resolve({ success: true }); // Fallback to direct request
+                            resolve({ success: false, error: 'Please open a regular website (not chrome:// pages)' });
                         }
                     });
                 });
                 
-                console.log('Permission result:', permissionResult);
-                
-                if (!permissionResult.success) {
-                    throw new Error(permissionResult.error || 'Permission denied');
+                if (!result.success) {
+                    throw new Error(result.error);
                 }
                 
-                // Now try to get the stream in popup
-                console.log('Testing microphone permission in popup...');
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    audio: true
-                });
-                mediaRecorder = new MediaRecorder(stream);
-                audioChunks = [];
-
-                mediaRecorder.ondataavailable = (event) => {
-                    audioChunks.push(event.data);
-                };
-
-                mediaRecorder.onstop = async () => {
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-                    console.log('🎤 Recording stopped, audio blob created:', audioBlob);
-                    
-                    // TODO: Send audioBlob to Whisper API for transcription
-                    // For now, we'll simulate transcription
-                    simulateTranscription(audioBlob);
-                    
-                    // Stop all tracks
-                    stream.getTracks().forEach(track => track.stop());
-                };
-
-                mediaRecorder.start();
+                // 3. UPDATE UI FOR RECORDING STATE
                 isRecording = true;
-                
-                // Update UI
                 voiceInputArea.classList.add('recording');
                 voiceInputArea.title = 'Click to Stop Recording';
                 recordingIndicator.style.display = 'flex';
-                commentTextarea.placeholder = 'Click to Stop Transcribing\nAny thoughts?';
+                commentTextarea.placeholder = 'Recording... Click microphone to stop';
                 
-                console.log('🎤 Recording started');
+                console.log('✅ Recording started successfully');
                 showMessage('Recording started...', false);
-            
-        } catch (error) {
-                console.error('❌ Error accessing microphone:', error);
                 
-                // Safely log error details
-                try {
-                    console.log('🔍 Error details:', {
-                        name: error?.name || 'Unknown',
-                        message: error?.message || 'Unknown error',
-                        stack: error?.stack || 'No stack trace'
-                    });
-                    
-                    // Log more detailed error information
-                    if (error instanceof DOMException) {
-                        console.log('DOMException details:', {
-                            name: error.name,
-                            message: error.message,
-                            code: error.code
-                        });
-                    }
-                    
-                    // Log the full error object
-                    console.log('Full error object:', error);
-                    console.log('Error type:', typeof error);
-                    console.log('Error constructor:', error?.constructor?.name || 'Unknown');
-                    console.log('Error toString():', error?.toString() || 'Cannot convert to string');
-                } catch (logError) {
-                    console.error('Error logging error details:', logError);
-                }
-                
-                // Handle different types of permission errors
-                const errorName = error?.name || 'Unknown';
-                const errorMessage = error?.message || '';
-                
-                if (errorName === 'NotAllowedError') {
-                    if (errorMessage.includes('Permission dismissed')) {
-                        showMessage('Microphone permission was denied. Click the microphone icon again to retry.', true);
-                    } else {
-                        showMessage('Microphone access denied. Please allow microphone access in your browser settings.', true);
-                    }
-                } else if (errorName === 'NotFoundError') {
-                    showMessage('No microphone found. Please connect a microphone and try again.', true);
-                } else if (errorName === 'NotSupportedError') {
-                    showMessage('Microphone not supported in this browser. Please use a modern browser.', true);
-                } else {
-                    showMessage('Unable to access microphone. Please check permissions and try again.', true);
-                }
-                
-                // Show helpful instructions for permission issues
-                if (errorName === 'NotAllowedError') {
-                    console.log('💡 To enable microphone access:');
-                    console.log('1. Click the microphone icon in the address bar');
-                    console.log('2. Select "Allow" for microphone access');
-                    console.log('3. Or go to chrome://settings/content/microphone');
-                    console.log('4. Try clicking the microphone icon in the main browser window');
-                    console.log('5. If still not working, try restarting Chrome browser');
-                    
-                    // Show user-friendly message and open settings
-                    showMessage('麦克风权限被拒绝。正在打开权限设置页面...', true);
-                    
-                    // Open Chrome settings page for microphone permissions
-                    setTimeout(() => {
-                        // Open specific extension permission settings page
-                        chrome.tabs.create({ 
-                            url: 'chrome://settings/content/siteDetails?site=chrome-extension://jcjpicpelibofggpbbmajafjipppnojo' 
-                        });
-                        
-                        // Show instructions
-                        setTimeout(() => {
-                            showMessage('请在权限设置页面中将麦克风权限设置为"允许"', false);
-                        }, 2000);
-                    }, 1000);
-                }
+            } catch (error) {
+                // 4. HANDLE START RECORDING ERRORS
+                console.error('❌ Failed to start recording:', error);
+                showMessage('Recording failed: ' + error.message, true);
                 
                 // Reset UI state
                 isRecording = false;
                 voiceInputArea.classList.remove('recording');
+                recordingIndicator.style.display = 'none';
+            }
+            
+        } else {
+            // STOP RECORDING via Content Script
+            try {
+                console.log('🛑 Stopping recording...');
+                
+                // Send message to content script to stop recording
+                const result = await new Promise((resolve) => {
+                    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                        if (tabs[0]) {
+                            chrome.tabs.sendMessage(tabs[0].id, { action: 'stopRecording' }, (response) => {
+                                resolve(response || { success: true });
+                            });
+                        } else {
+                            resolve({ success: true });
+                        }
+                    });
+                });
+                
+                // 5. UPDATE UI FOR STOPPED STATE
+                isRecording = false;
+                voiceInputArea.classList.remove('recording');
                 voiceInputArea.title = 'Click to Start Recording';
                 recordingIndicator.style.display = 'none';
-                commentTextarea.placeholder = 'Click to Input Voice Transcription\nAny thoughts?';
+                commentTextarea.placeholder = 'Processing transcription...';
+                
+                console.log('✅ Recording stopped successfully');
+                showMessage('Recording stopped, processing...', false);
+                
+            } catch (error) {
+                // 6. HANDLE STOP RECORDING ERRORS
+                console.error('❌ Failed to stop recording:', error);
+                isRecording = false;
+                voiceInputArea.classList.remove('recording');
+                recordingIndicator.style.display = 'none';
             }
-        } else {
-            // Stop recording
-            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-                mediaRecorder.stop();
-            }
-            
-            isRecording = false;
-            
-            // Update UI
-            voiceInputArea.classList.remove('recording');
-            voiceInputArea.title = 'Click to Start Recording';
-            recordingIndicator.style.display = 'none';
-            commentTextarea.placeholder = 'Click to Input Voice Transcription\nAny thoughts?';
-            
-            console.log('🛑 Recording stopped');
-            showMessage('Recording stopped, processing...', false);
         }
     }
 
@@ -1088,7 +983,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const commentTextarea = document.getElementById('insightComment');
         
         // Show processing state
-        commentTextarea.placeholder = 'Processing transcription...\nAny thoughts?';
+        commentTextarea.placeholder = 'Processing transcription...';
         
         // Simulate API delay
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -1104,7 +999,7 @@ document.addEventListener('DOMContentLoaded', function() {
             commentTextarea.value = sampleText;
         }
         
-        commentTextarea.placeholder = 'Click to Input Voice Transcription\nAny thoughts?';
+        commentTextarea.placeholder = 'Click to Input Voice Transcription';
         
         console.log('📝 Transcription completed (simulated)');
         showMessage('Transcription completed!', false);
@@ -1307,4 +1202,71 @@ document.addEventListener('DOMContentLoaded', function() {
         originalShowUserInterface();
         loadUserTags();
     };
+    
+    // 7. LISTEN FOR RECORDING COMPLETION FROM CONTENT SCRIPT
+    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+        if (request.action === 'recordingComplete') {
+            console.log('🎤 Recording completed, processing audio...');
+            console.log('📁 Audio data received, size:', request.audioSize, 'bytes');
+            
+            if (request.audioData) {
+                // Convert base64 back to blob for processing
+                fetch(request.audioData)
+                    .then(res => res.blob())
+                    .then(async audioBlob => {
+                        console.log('✅ Audio blob processed, size:', audioBlob.size, 'bytes');
+                        
+                        // Update UI to show completion
+                        const commentTextarea = document.getElementById('insightComment');
+                        if (commentTextarea) {
+                            commentTextarea.placeholder = 'Audio recorded! Transcription feature coming soon...';
+                        }
+                        
+                        // Show success message
+                        const sizeKB = Math.round(audioBlob.size / 1024);
+                        showMessage(`Recording completed! Audio size: ${sizeKB}KB`, false);
+                        
+                        // Send audioBlob to real transcription service
+                        try {
+                            console.log('🎤 Starting real STT transcription...');
+                            const transcribedText = await STTService.transcribeAudioWithWhisper(audioBlob);
+                            console.log('✅ STT transcription successful:', transcribedText);
+                            
+                            // Insert transcribed text into comment textarea
+                            const commentTextarea = document.getElementById('insightComment');
+                            if (commentTextarea) {
+                                const currentText = commentTextarea.value;
+                                if (currentText.trim()) {
+                                    commentTextarea.value = currentText + '\n\n' + transcribedText;
+                                } else {
+                                    commentTextarea.value = transcribedText;
+                                }
+                                commentTextarea.placeholder = 'Click to Input Voice Transcription';
+                            }
+                            
+                            showMessage('Transcription completed successfully!', false);
+                        } catch (sttError) {
+                            console.error('❌ STT transcription failed:', sttError);
+                            showMessage(`Transcription failed: ${sttError.message}`, true);
+                            
+                            // Fallback: still show audio was recorded
+                            const commentTextarea = document.getElementById('insightComment');
+                            if (commentTextarea) {
+                                commentTextarea.placeholder = 'Audio recorded! Transcription failed - check config';
+                            }
+                        }
+                    })
+                    .catch(error => {
+                        console.error('❌ Failed to process recorded audio:', error);
+                        showMessage('Failed to process recorded audio', true);
+                    });
+            } else {
+                console.error('❌ No audio data received from content script');
+                showMessage('Recording failed: No audio data received', true);
+            }
+            
+            sendResponse({ success: true });
+            return true;
+        }
+    });
 }); 
